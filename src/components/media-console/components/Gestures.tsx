@@ -366,6 +366,8 @@ const Gestures = ({
   const startVolume = useSharedValue(0);
   const startBrightness = useSharedValue(0);
   const toastOpacity = useSharedValue(0);
+  const is2xActiveShared = useSharedValue(false);
+  const isPanActive = useSharedValue(false);
 
   // Toast styles (inline, no Tailwind)
   const toastAnimatedStyle = useAnimatedStyle(
@@ -418,7 +420,7 @@ const Gestures = ({
   }, [toastOpacity]);
 
   const start2x = useCallback(() => {
-    if (disableGesture || showControls) return;
+    if (disableGesture || showControls || isPanActive.value) return;
     if (settingsStorage.isHapticFeedbackEnabled()) {
       ReactNativeHapticFeedback.trigger('impactMedium', {
         enableVibrateFallback: true,
@@ -426,9 +428,10 @@ const Gestures = ({
       });
     }
     is2xActiveRef.current = true;
+    is2xActiveShared.value = true;
     setPlayback(2);
     show2xToast();
-  }, [disableGesture, showControls, setPlayback, show2xToast]);
+  }, [disableGesture, showControls, setPlayback, show2xToast, isPanActive, is2xActiveShared]);
 
   const cancel2x = useCallback(() => {
     if (longPressTimeoutRef.current) {
@@ -436,12 +439,13 @@ const Gestures = ({
       longPressTimeoutRef.current = null;
     }
     touchStartPosRef.current = null;
+    is2xActiveShared.value = false;
     if (is2xActiveRef.current) {
       is2xActiveRef.current = false;
       setPlayback(baseRateRef.current);
       hideToast();
     }
-  }, [hideToast, setPlayback]);
+  }, [hideToast, setPlayback, is2xActiveShared]);
 
   const handleTouchDown = useCallback(
     (x: number, y: number) => {
@@ -457,11 +461,11 @@ const Gestures = ({
 
   const handleTouchMove = useCallback(
     (x: number, y: number) => {
+      if (is2xActiveRef.current) return;
       if (!touchStartPosRef.current) return;
       const dx = Math.abs(x - touchStartPosRef.current.x);
       const dy = Math.abs(y - touchStartPosRef.current.y);
       if (dx > 8 || dy > 8) {
-        // Finger is moving -> cancel long press immediately
         cancel2x();
       }
     },
@@ -639,6 +643,8 @@ const Gestures = ({
         .minDistance(10) // Minimum distance before gesture starts
         .onTouchesDown((event) => {
           'worklet';
+          isPanActive.value = false;
+          is2xActiveShared.value = false;
           if (event.allTouches && event.allTouches.length > 0) {
             runOnJS(handleTouchDown)(
               event.allTouches[0].x,
@@ -665,6 +671,10 @@ const Gestures = ({
         })
         .onStart((event) => {
           'worklet';
+          if (is2xActiveShared.value) {
+            return;
+          }
+          isPanActive.value = true;
           runOnJS(cancel2x)();
           const isLeftSide = event.x < (gestureWidth.value || SCREEN_WIDTH) / 2;
 
@@ -678,7 +688,9 @@ const Gestures = ({
         })
         .onUpdate((event) => {
           'worklet';
-          runOnJS(cancel2x)();
+          if (is2xActiveShared.value || !isPanActive.value) {
+            return;
+          }
           const isLeftSide = event.x < (gestureWidth.value || SCREEN_WIDTH) / 2;
           const change = -event.translationY / SWIPE_RANGE;
 
@@ -702,6 +714,8 @@ const Gestures = ({
         })
         .onFinalize(() => {
           'worklet';
+          isPanActive.value = false;
+          is2xActiveShared.value = false;
           runOnJS(handleTouchUp)();
           runOnJS(setIsVolumeVisible)(false);
           runOnJS(setIsBrightnessVisible)(false);
@@ -710,6 +724,8 @@ const Gestures = ({
       SCREEN_WIDTH,
       gestureWidth,
       disableGesture,
+      is2xActiveShared,
+      isPanActive,
       handleTouchDown,
       handleTouchMove,
       handleTouchUp,
@@ -840,7 +856,7 @@ const Gestures = ({
         .maxDistance(14)
         .onEnd((event, success) => {
           'worklet';
-          if (success) {
+          if (success && !is2xActiveShared.value) {
             const side =
               event.x < (gestureWidth.value || SCREEN_WIDTH) / 2
                 ? 'left'
@@ -848,7 +864,7 @@ const Gestures = ({
             runOnJS(handleTap)(event.x, event.y, side);
           }
         }),
-    [SCREEN_WIDTH, gestureWidth, handleTap],
+    [SCREEN_WIDTH, gestureWidth, handleTap, is2xActiveShared],
   );
 
   const composedGesture = useMemo(
