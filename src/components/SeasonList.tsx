@@ -671,6 +671,7 @@ const SeasonList: React.FC<SeasonListProps> = ({
             </TouchableOpacity>
             <Downloader
               downloadId={downloadId}
+              episodeIndex={downloadIndex}
               providerValue={providerValue}
               link={item.link}
               type={type}
@@ -816,6 +817,7 @@ const SeasonList: React.FC<SeasonListProps> = ({
             </TouchableOpacity>
             <Downloader
               downloadId={downloadId}
+              episodeIndex={downloadIndex}
               providerValue={providerValue}
               link={item.link}
               type={type}

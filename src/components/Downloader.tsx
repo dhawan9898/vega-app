@@ -115,6 +115,7 @@ type PendingDownload = {
   showName?: string;
   episodeName?: string;
   seasonTitle?: string;
+  episodeIndex?: number;
   mediaType: 'movie' | 'series';
   imdbId?: string;
   poster?: string;
@@ -145,6 +146,7 @@ const DownloadComponent = ({
   showName,
   episodeName,
   seasonTitle,
+  episodeIndex,
   imdbId,
   poster,
   background,
@@ -163,6 +165,7 @@ const DownloadComponent = ({
   showName?: string;
   episodeName?: string;
   seasonTitle?: string;
+  episodeIndex?: number;
   imdbId?: string;
   poster?: string;
   background?: string;
@@ -371,6 +374,7 @@ const DownloadComponent = ({
       showName,
       episodeName,
       seasonTitle,
+      episodeIndex,
       mediaType,
       imdbId,
       poster,
@@ -405,6 +409,7 @@ const DownloadComponent = ({
         showName,
         episodeName,
         seasonTitle,
+        episodeIndex,
         mediaType,
         imdbId,
         poster,

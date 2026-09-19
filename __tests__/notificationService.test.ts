@@ -202,7 +202,7 @@ describe('notification service download lifecycle', () => {
           navigationTarget: 'downloads',
         },
         android: expect.objectContaining({
-          groupId: 'vega-downloads',
+          groupId: 'vega-downloads-queued',
           sortKey: 'movie_direct_0',
           actions: [
             expect.objectContaining({
@@ -214,6 +214,28 @@ describe('notification service download lifecycle', () => {
             }),
             expect.objectContaining({pressAction: {id: 'cancel-download'}}),
           ],
+          smallIcon: 'ic_download_queued',
+        }),
+      }),
+    );
+  });
+
+  it('shows completed downloads with a complete check icon in the completed group', async () => {
+    await notificationService.showDownloadComplete(
+      'Movie',
+      'movie_direct_0',
+      'http',
+    );
+
+    expect(mockDisplayNotification).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'downloadCompletemovie_direct_0',
+        title: 'Download complete',
+        body: 'Movie',
+        android: expect.objectContaining({
+          smallIcon: 'ic_download_complete',
+          groupId: 'vega-downloads-completed',
+          sortKey: 'movie_direct_0',
         }),
       }),
     );

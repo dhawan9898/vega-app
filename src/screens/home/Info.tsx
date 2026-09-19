@@ -5,7 +5,7 @@ import {
 } from '@react-navigation/native-stack';
 import {StatusBar} from 'expo-status-bar';
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {FlatList, RefreshControl, View} from 'react-native';
+import {FlatList, Image, RefreshControl, View} from 'react-native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import {HomeStackParamList, TabStackParamList} from '../../App';
 import Button from '../../components/ui/Button';
@@ -280,9 +280,25 @@ export default function Info({route, navigation}: Props): React.JSX.Element {
     <QueryErrorBoundary>
       <M3PaletteContext.Provider value={detailColors}>
         <View style={{backgroundColor: detailColors.background, flex: 1}}>
+          <View
+            pointerEvents="none"
+            style={{
+              height: 340,
+              left: 0,
+              position: 'absolute',
+              right: 0,
+              top: 0,
+            }}>
+            <Image
+              source={{uri: backgroundImage}}
+              resizeMode="cover"
+              style={{height: 340, width: '100%'}}
+            />
+          </View>
           <StatusBarScrim visible={statusBarScrimVisible} />
           <StatusBar style="light" />
           <FlatList
+            style={{backgroundColor: 'transparent'}}
             data={[]}
             keyExtractor={(_, index) => String(index)}
             renderItem={() => null}
@@ -319,7 +335,12 @@ export default function Info({route, navigation}: Props): React.JSX.Element {
                   trailerUrl={info?.trailerUrl?.trim()}
                   year={meta?.year}
                 />
-                <View style={{paddingHorizontal: 18, paddingTop: 24}}>
+                <View
+                  style={{
+                    backgroundColor: detailColors.background,
+                    paddingHorizontal: 18,
+                    paddingTop: 24,
+                  }}>
                   {isLoading && !info ? (
                     <View style={{gap: 12}}>
                       <SkeletonLoader show height={28} width={120} />
@@ -347,7 +368,14 @@ export default function Info({route, navigation}: Props): React.JSX.Element {
                 </View>
               </>
             }
-            ListFooterComponent={<View style={{height: 110}} />}
+            ListFooterComponent={
+              <View
+                style={{
+                  backgroundColor: detailColors.background,
+                  height: 110,
+                }}
+              />
+            }
             onScroll={handleScroll}
             scrollEventThrottle={16}
             showsVerticalScrollIndicator={false}

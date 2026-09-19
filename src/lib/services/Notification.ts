@@ -306,6 +306,10 @@ class NotificationService {
     return {downloadId, sourceType, navigationTarget: 'downloads'};
   }
 
+  private getNotificationSortKey(downloadId: string): string {
+    return downloadId.replace(/_E(\d+)$/, (_, num) => `_E${num.padStart(5, '0')}`);
+  }
+
   /**
    * Helper method to show download starting notification
    */
@@ -323,7 +327,7 @@ class NotificationService {
       color,
       data: this.getDownloadData(downloadId, sourceType),
       groupId: 'vega-downloads',
-      sortKey: downloadId,
+      sortKey: this.getNotificationSortKey(downloadId),
       progress: {
         max: 100,
         current: 0,
@@ -342,10 +346,11 @@ class NotificationService {
       id: downloadId,
       title,
       body: 'Queued',
+      smallIcon: 'ic_download_queued',
       color,
       data: this.getDownloadData(downloadId, sourceType),
-      groupId: 'vega-downloads',
-      sortKey: downloadId,
+      groupId: 'vega-downloads-queued',
+      sortKey: this.getNotificationSortKey(downloadId),
       actions: [
         {
           title: 'Start now',
@@ -389,7 +394,7 @@ class NotificationService {
       color,
       data: this.getDownloadData(downloadId, sourceType),
       groupId: 'vega-downloads',
-      sortKey: downloadId,
+      sortKey: this.getNotificationSortKey(downloadId),
       progress: {
         max: 100,
         current: Math.min(Math.max(progress * 100, 0), 100),
@@ -414,8 +419,11 @@ class NotificationService {
       id: `downloadComplete${downloadId}`,
       title: 'Download complete',
       body: title,
+      smallIcon: 'ic_download_complete',
       color,
       data: this.getDownloadData(downloadId, sourceType),
+      groupId: 'vega-downloads-completed',
+      sortKey: this.getNotificationSortKey(downloadId),
     });
   }
 

@@ -46,6 +46,9 @@ export const sortDownloadedEpisodes = (items: DownloadItem[]): DownloadItem[] =>
     if (seasonDifference !== 0) {
       return seasonDifference;
     }
+    if (a.episodeIndex !== undefined && b.episodeIndex !== undefined) {
+      return a.episodeIndex - b.episodeIndex;
+    }
     const episodeDifference = getEpisodeNumber(a) - getEpisodeNumber(b);
     return episodeDifference || a.createdAt - b.createdAt;
   });

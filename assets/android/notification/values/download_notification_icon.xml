@@ -6,4 +6,5 @@
       name while keeping the framework drawable as the actual implementation.
     -->
     <item name="ic_download_notification_system" type="drawable">@android:drawable/stat_sys_download</item>
+    <item name="ic_download_complete_system" type="drawable">@android:drawable/stat_sys_download_done</item>
 </resources>

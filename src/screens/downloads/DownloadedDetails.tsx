@@ -10,6 +10,7 @@ import {
   ScrollView,
   StatusBar,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -123,14 +124,27 @@ const DownloadedDetails = ({ navigation, route }: DownloadedDetailsProps) => {
       setSelectedSeason(seasons[0]);
     }
   }, [seasons, selectedSeason]);
+  const [searchText, setSearchText] = useState('');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+
   const items = useMemo(() => {
     if (!group) {
       return [];
     }
-    return sortDownloadedEpisodes(
+    let list = sortDownloadedEpisodes(
       group.items.filter(item => getSeasonTitle(item) === selectedSeason),
     );
-  }, [group, selectedSeason]);
+    if (searchText.trim()) {
+      const query = searchText.trim().toLowerCase();
+      list = list.filter(item =>
+        (item.episodeName || item.title || '').toLowerCase().includes(query),
+      );
+    }
+    if (sortOrder === 'desc') {
+      list = [...list].reverse();
+    }
+    return list;
+  }, [group, selectedSeason, searchText, sortOrder]);
 
   if (!group) {
     return (
@@ -339,11 +353,87 @@ const DownloadedDetails = ({ navigation, route }: DownloadedDetailsProps) => {
             />
           ) : null}
 
+          {/* Search and Sort Controls */}
+          {(group.items.length > 2 || searchText) && (
+            <View className="flex-row items-center mt-3">
+              <View
+                style={{
+                  backgroundColor: colors.surfaceContainerHigh,
+                  borderColor: colors.outlineVariant,
+                  borderRadius: 18,
+                  borderWidth: 1,
+                  flex: 1,
+                  flexDirection: 'row',
+                  height: 48,
+                  marginRight: 10,
+                  overflow: 'hidden',
+                }}>
+                <View
+                  style={{
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    paddingLeft: 14,
+                  }}>
+                  <MaterialCommunityIcons
+                    name="magnify"
+                    size={22}
+                    color={colors.primary}
+                  />
+                </View>
+                <TextInput
+                  accessibilityLabel="Find episode"
+                  placeholder="Find episode"
+                  placeholderTextColor={colors.onSurfaceVariant}
+                  selectionColor={colors.primary}
+                  returnKeyType="search"
+                  style={{
+                    color: colors.onSurface,
+                    flex: 1,
+                    fontSize: 16,
+                    paddingHorizontal: 10,
+                    paddingVertical: 0,
+                  }}
+                  value={searchText}
+                  onChangeText={setSearchText}
+                />
+              </View>
+              <TouchableOpacity
+                accessibilityLabel={
+                  sortOrder === 'asc'
+                    ? 'Sort episodes descending'
+                    : 'Sort episodes ascending'
+                }
+                className="h-12 w-12 flex-row items-center justify-center"
+                style={{
+                  backgroundColor: colors.secondaryContainer,
+                  borderRadius: 18,
+                }}
+                onPress={() =>
+                  setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'))
+                }>
+                <MaterialCommunityIcons
+                  name={
+                    sortOrder === 'asc' ? 'sort-ascending' : 'sort-descending'
+                  }
+                  size={24}
+                  color={colors.onSecondaryContainer}
+                />
+              </TouchableOpacity>
+            </View>
+          )}
+
           <Text
             className="mb-3 mt-7 text-xl font-bold"
             style={{ color: colors.onBackground }}>
             Ready to watch
           </Text>
+          {items.length === 0 && searchText ? (
+            <Text
+              className="my-4 text-center text-sm"
+              style={{ color: colors.onSurfaceVariant }}>
+              No downloaded episodes found for "{searchText}"
+            </Text>
+          ) : null}
           {items.map((item, index) => (
             <View
               key={item.id}

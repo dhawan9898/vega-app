@@ -181,4 +181,27 @@ describe('downloaded library grouping', () => {
       'Show_SSeason 2_E1',
     ]);
   });
+
+  it('sorts episodes using explicit provider episodeIndex regardless of completion order', () => {
+    const sorted = sortDownloadedEpisodes([
+      createItem({
+        id: 'Show_custom_b',
+        title: 'Special OVA Part Two',
+        episodeIndex: 1,
+        seasonTitle: 'Season 1',
+        createdAt: 100,
+      }),
+      createItem({
+        id: 'Show_custom_a',
+        title: 'Special OVA Part One',
+        episodeIndex: 0,
+        seasonTitle: 'Season 1',
+        createdAt: 200,
+      }),
+    ]);
+    expect(sorted.map(item => item.id)).toEqual([
+      'Show_custom_a',
+      'Show_custom_b',
+    ]);
+  });
 });

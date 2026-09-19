@@ -39,6 +39,7 @@ export interface DownloadItem {
   showName?: string;
   episodeName?: string;
   seasonTitle?: string;
+  episodeIndex?: number;
   type: 'movie' | 'series';
   imdbId?: string;
   url: string;
@@ -86,6 +87,7 @@ export type DownloadMediaInput = Pick<
   | 'showName'
   | 'episodeName'
   | 'seasonTitle'
+  | 'episodeIndex'
   | 'type'
   | 'imdbId'
   | 'poster'

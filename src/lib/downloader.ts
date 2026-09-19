@@ -29,6 +29,7 @@ export const downloadManager = async ({
   showName,
   episodeName,
   seasonTitle,
+  episodeIndex,
   mediaType,
   imdbId,
   poster,
@@ -51,6 +52,7 @@ export const downloadManager = async ({
   showName?: string;
   episodeName?: string;
   seasonTitle?: string;
+  episodeIndex?: number;
   mediaType: 'movie' | 'series';
   imdbId?: string;
   poster?: string;
@@ -89,6 +91,7 @@ export const downloadManager = async ({
     showName,
     episodeName,
     seasonTitle,
+    episodeIndex,
     type: mediaType,
     imdbId,
     poster,
