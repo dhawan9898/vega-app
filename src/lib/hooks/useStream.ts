@@ -311,7 +311,55 @@ export const getCompletedDownloadPathSync = (
             d.url === episode.sourceLink ||
             d.filePath === episode.sourceLink))),
   );
-  return completed?.filePath || null;
+  if (completed?.filePath) {
+    return completed.filePath;
+  }
+
+  // Fallback: title + season + episode matching
+  const episodeTitle = episode.title || episode.episodeName;
+  const primaryTitle = params?.primaryTitle || params?.title;
+  const secondaryTitle = params?.secondaryTitle || params?.seasonTitle;
+  const infoUrl = params?.infoUrl || params?.link;
+
+  const titleMatched = allDownloads.find(d => {
+    if (
+      d.status !== 'completed' ||
+      !d.filePath ||
+      d.isSubtitle ||
+      isSubtitleDownloadItem(d)
+    ) {
+      return false;
+    }
+    const showMatch =
+      (infoUrl && d.infoUrl === infoUrl) ||
+      (primaryTitle &&
+        (d.showName === primaryTitle ||
+          d.title === primaryTitle ||
+          d.title?.startsWith(primaryTitle)));
+
+    if (!showMatch) {
+      return false;
+    }
+
+    const seasonMatch =
+      !secondaryTitle ||
+      !d.seasonTitle ||
+      d.seasonTitle === secondaryTitle ||
+      secondaryTitle.toLowerCase().includes(d.seasonTitle.toLowerCase()) ||
+      d.seasonTitle.toLowerCase().includes(secondaryTitle.toLowerCase());
+
+    const episodeMatch =
+      episodeTitle &&
+      (d.episodeName === episodeTitle ||
+        d.title === episodeTitle ||
+        d.title?.includes(episodeTitle) ||
+        d.episodeName?.includes(episodeTitle) ||
+        episodeTitle.includes(d.episodeName || '___never___'));
+
+    return seasonMatch && episodeMatch;
+  });
+
+  return titleMatched?.filePath || null;
 };
 
 export const useStream = ({
@@ -320,13 +368,13 @@ export const useStream = ({
   provider,
   enabled = true,
 }: UseStreamOptions) => {
-  const [selectedStream, setSelectedStream] = useState<Stream>({
-    server: '',
-    link: '',
-    type: '',
+  const [selectedStream, setSelectedStream] = useState<Stream>(() => {
+    const path = getCompletedDownloadPathSync(activeEpisode, routeParams);
+    return path
+      ? { server: 'Downloaded', link: path, type: 'mp4' }
+      : { server: '', link: '', type: '' };
   });
   const [externalSubs, setExternalSubs] = useState<any[]>([]);
-
 
   const activeEpisodeKey = getEpisodeIdentity(activeEpisode);
   const previousEpisodeKeyRef = useRef(activeEpisodeKey);
@@ -336,8 +384,13 @@ export const useStream = ({
       return;
     }
     previousEpisodeKeyRef.current = activeEpisodeKey;
-    setSelectedStream({ server: '', link: '', type: '' });
-  }, [activeEpisodeKey]);
+    const path = getCompletedDownloadPathSync(activeEpisode, routeParams);
+    setSelectedStream(
+      path
+        ? { server: 'Downloaded', link: path, type: 'mp4' }
+        : { server: '', link: '', type: '' },
+    );
+  }, [activeEpisode, activeEpisodeKey, routeParams]);
 
   const localPlaceholder = useMemo(() => {
     const path = getCompletedDownloadPathSync(activeEpisode, routeParams);
@@ -374,9 +427,19 @@ export const useStream = ({
         ? { server: 'Downloaded', link: downloadedPath, type: 'mp4' }
         : null;
 
-      const remoteLink =
+      let remoteLink =
         (!isLocalPath(activeEpisode?.link) && activeEpisode?.link) ||
         activeEpisode?.sourceLink;
+
+      if (!remoteLink && downloadedPath) {
+        const allDownloads = Object.values(
+          useDownloadsStore.getState().downloads,
+        );
+        const match = allDownloads.find(d => d.filePath === downloadedPath);
+        if (match?.sourceLink && !isLocalPath(match.sourceLink)) {
+          remoteLink = match.sourceLink;
+        }
+      }
 
       if (!remoteLink) {
         if (localStream) {
@@ -392,21 +455,27 @@ export const useStream = ({
       let remoteStreams: Stream[] = [];
       try {
         const controller = new AbortController();
-        const data = await providerManager.getStream({
-          link: remoteLink,
-          type: routeParams?.type,
-          signal: controller.signal,
-          providerValue: routeParams?.providerValue || provider,
-        });
+        const timeoutMs = 25000;
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const data = await providerManager.getStream({
+            link: remoteLink,
+            type: routeParams?.type,
+            signal: controller.signal,
+            providerValue: routeParams?.providerValue || provider,
+          });
 
-        // Filter out excluded qualities
-        const excludedQualities = settingsStorage.getExcludedQualities() || [];
-        const filteredQualities = data?.filter(
-          streamItem => !excludedQualities.includes(streamItem?.quality + 'p'),
-        );
+          // Filter out excluded qualities
+          const excludedQualities = settingsStorage.getExcludedQualities() || [];
+          const filteredQualities = data?.filter(
+            streamItem => !excludedQualities.includes(streamItem?.quality + 'p'),
+          );
 
-        remoteStreams =
-          filteredQualities?.length > 0 ? filteredQualities : data || [];
+          remoteStreams =
+            filteredQualities?.length > 0 ? filteredQualities : data || [];
+        } finally {
+          clearTimeout(timeoutId);
+        }
       } catch (err) {
         if (localStream) {
           console.warn(
@@ -437,6 +506,8 @@ export const useStream = ({
       Boolean(
         activeEpisode?.link || activeEpisode?.id || activeEpisode?.title,
       ),
+    initialData: () => localPlaceholder,
+    initialDataUpdatedAt: localPlaceholder ? 0 : undefined,
     placeholderData: localPlaceholder,
     staleTime: 5 * 60 * 1000, // 5 minutes
     gcTime: 30 * 60 * 1000, // 30 minutes
@@ -447,7 +518,7 @@ export const useStream = ({
       return true;
     },
     retryDelay: attemptIndex => Math.min(1000 * 2 ** attemptIndex, 10000),
-    refetchOnMount: true,
+    refetchOnMount: 'always',
     refetchOnWindowFocus: false,
   });
 

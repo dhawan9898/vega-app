@@ -47,7 +47,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import * as DocumentPicker from 'expo-document-picker';
 import { FlashList } from '@shopify/flash-list';
 import SearchSubtitles from '../../components/SearchSubtitles';
-import { useStream, useVideoSettings } from '../../lib/hooks/useStream';
+import { isLocalPath, useStream, useVideoSettings } from '../../lib/hooks/useStream';
 import {
   usePlayerProgress,
   usePlayerSettings,
@@ -1897,8 +1897,13 @@ const Player = ({ route }: Props): React.JSX.Element => {
     ],
   );
 
+  const isLocalOrDownloadedStream =
+    selectedStream?.type === 'local' ||
+    selectedStream?.server === 'Downloaded' ||
+    Boolean(selectedStream?.link && isLocalPath(selectedStream.link));
+
   // Show loading state
-  if (streamLoading && !isCasting && selectedStream?.type !== 'local') {
+  if (streamLoading && !isCasting && !isLocalOrDownloadedStream) {
     return (
       <SafeAreaView
         edges={{ right: 'off', top: 'off', left: 'off', bottom: 'off' }}
@@ -1928,7 +1933,7 @@ const Player = ({ route }: Props): React.JSX.Element => {
   }
 
   // Show error state
-  if (streamError && !isCasting && selectedStream?.type !== 'local') {
+  if (streamError && !isCasting && !isLocalOrDownloadedStream) {
     return (
       <SafeAreaView className="bg-black flex-1 justify-center items-center">
         <SystemBars hidden={true} />
