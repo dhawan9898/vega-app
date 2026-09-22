@@ -91,6 +91,7 @@ const Extensions = ({navigation}: Props) => {
   const [updatingProvider, setUpdatingProvider] = useState<string | null>(null);
   const [updateInfos, setUpdateInfos] = useState<UpdateInfo[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [isAtTop, setIsAtTop] = useState(true);
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const [providerTest, setProviderTest] = useState<ProviderTestState | null>(
     null,
@@ -439,9 +440,16 @@ const Extensions = ({navigation}: Props) => {
         'error',
       );
     } finally {
-      setRefreshing(false);
+      setTimeout(() => {
+        setRefreshing(false);
+      }, 50);
     }
   };
+
+  const handleScroll = useCallback((event: any) => {
+    const offsetY = event.nativeEvent?.contentOffset?.y ?? 0;
+    setIsAtTop(offsetY <= 0);
+  }, []);
 
   const handleRefresh = async () => {
     await refreshProviders(activeSourceAuthor);
@@ -598,6 +606,8 @@ const Extensions = ({navigation}: Props) => {
         renderItem={renderProviderCard}
         className="mt-3 flex-1"
         contentContainerStyle={{paddingBottom: 24}}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -605,6 +615,7 @@ const Extensions = ({navigation}: Props) => {
             colors={[primary]}
             tintColor={primary}
             progressBackgroundColor={colors.surfaceContainerHigh}
+            enabled={isAtTop || refreshing}
           />
         }
         ListEmptyComponent={

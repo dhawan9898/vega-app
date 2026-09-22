@@ -54,6 +54,7 @@ export default function Info({route, navigation}: Props): React.JSX.Element {
   const [storyVisible, setStoryVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshVersion, setRefreshVersion] = useState(0);
+  const [isAtTop, setIsAtTop] = useState(true);
   const initialPoster = route.params.poster;
   const initialCacheKey = initialPoster
     ? `detail-bg-accent-v1:${initialPoster}`
@@ -179,14 +180,21 @@ export default function Info({route, navigation}: Props): React.JSX.Element {
     setRefreshing(true);
     setRefreshVersion(version => version + 1);
     try {
-      await refetch();
+      await Promise.race([
+        refetch(),
+        new Promise(resolve => setTimeout(resolve, 10000)),
+      ]);
     } finally {
-      setRefreshing(false);
+      setTimeout(() => {
+        setRefreshing(false);
+      }, 50);
     }
   }, [refetch]);
 
   const handleScroll = useCallback((event: any) => {
-    setStatusBarScrimVisible(event.nativeEvent.contentOffset.y > 12);
+    const offsetY = event.nativeEvent?.contentOffset?.y ?? 0;
+    setStatusBarScrimVisible(offsetY > 12);
+    setIsAtTop(offsetY <= 0);
   }, []);
 
   const toggleLibrary = useCallback(() => {
@@ -385,6 +393,7 @@ export default function Info({route, navigation}: Props): React.JSX.Element {
                 progressBackgroundColor={detailColors.surfaceContainer}
                 refreshing={refreshing}
                 onRefresh={handleRefresh}
+                enabled={isAtTop || refreshing}
               />
             }
           />

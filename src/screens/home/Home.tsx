@@ -1,4 +1,4 @@
-import {SafeAreaView, RefreshControl, View} from 'react-native';
+import {SafeAreaView, ScrollView, RefreshControl, View} from 'react-native';
 import Slider from '../../components/Slider';
 import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import {useFocusEffect} from '@react-navigation/native';
@@ -16,7 +16,7 @@ import ProviderDrawer from '../../components/ProviderDrawer';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {HomeStackParamList} from '../../App';
 import {Drawer} from 'react-native-drawer-layout';
-import {GestureHandlerRootView, ScrollView} from 'react-native-gesture-handler';
+import {GestureHandlerRootView} from 'react-native-gesture-handler';
 import {providerManager} from '../../lib/services/ProviderManager';
 import {Catalog} from '../../lib/providers/types';
 import Tutorial from '../../components/Touturial';
@@ -34,6 +34,7 @@ const Home = ({}: Props) => {
   const [statusBarScrimVisible, setStatusBarScrimVisible] = useState(false);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [manualRefreshing, setManualRefreshing] = useState(false);
+  const [isAtTop, setIsAtTop] = useState(true);
 
   // Memoize static values
   const disableDrawer = useMemo(
@@ -60,7 +61,9 @@ const Home = ({}: Props) => {
 
   // Memoized scroll handler
   const handleScroll = useCallback((event: any) => {
-    setStatusBarScrimVisible(event.nativeEvent.contentOffset.y > 12);
+    const offsetY = event.nativeEvent?.contentOffset?.y ?? 0;
+    setStatusBarScrimVisible(offsetY > 12);
+    setIsAtTop(offsetY <= 0);
   }, []);
 
   // Stable hero post calculation - uses provider value for caching
@@ -94,16 +97,21 @@ const Home = ({}: Props) => {
     try {
       // Clear hero cache to get a new random hero on refresh
       clearHeroCache(provider?.value);
-      await Promise.allSettled([
-        refetch(),
-        syncFromSharedFolder().catch(e =>
-          console.warn('[VegaSync] Home refresh sync failed:', e),
-        ),
+      await Promise.race([
+        Promise.allSettled([
+          refetch(),
+          syncFromSharedFolder().catch(e =>
+            console.warn('[VegaSync] Home refresh sync failed:', e),
+          ),
+        ]),
+        new Promise(resolve => setTimeout(resolve, 10000)),
       ]);
     } catch (refreshError) {
       console.error('Error refreshing home data:', refreshError);
     } finally {
-      setManualRefreshing(false);
+      setTimeout(() => {
+        setManualRefreshing(false);
+      }, 50);
     }
   }, [refetch, provider?.value]);
 
@@ -225,6 +233,7 @@ const Home = ({}: Props) => {
                   progressBackgroundColor={colors.surfaceContainer}
                   refreshing={manualRefreshing}
                   onRefresh={handleRefresh}
+                  enabled={isAtTop || manualRefreshing}
                 />
               }>
               <HeroOptimized
