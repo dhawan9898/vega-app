@@ -5,9 +5,10 @@ import {
 } from '@react-navigation/native-stack';
 import {StatusBar} from 'expo-status-bar';
 import React, {useCallback, useEffect, useMemo, useRef, useState} from 'react';
-import {FlatList, Image, RefreshControl, View} from 'react-native';
+import {FlatList, Image, Linking, RefreshControl, ToastAndroid, View} from 'react-native';
 import ReactNativeHapticFeedback from 'react-native-haptic-feedback';
 import {HomeStackParamList, TabStackParamList} from '../../App';
+import {isSafeExternalUrl} from '../../lib/sandbox/urlGuard';
 import Button from '../../components/ui/Button';
 import AppText from '../../components/ui/Text';
 import {QueryErrorBoundary} from '../../components/ErrorBoundary';
@@ -236,6 +237,23 @@ export default function Info({route, navigation}: Props): React.JSX.Element {
     } as never);
   }, [displayTitle, searchNavigation]);
 
+  const handleOpenWeb = useCallback(() => {
+    if (!webUrl) {
+      return;
+    }
+    if (settingsStorage.isSkipInAppWebview()) {
+      if (!isSafeExternalUrl(webUrl)) {
+        ToastAndroid.show('Unsupported link', ToastAndroid.SHORT);
+        return;
+      }
+      Linking.openURL(webUrl).catch(() => {
+        ToastAndroid.show('Failed to open browser', ToastAndroid.SHORT);
+      });
+    } else {
+      navigation.navigate('Webview', {link: webUrl});
+    }
+  }, [navigation, webUrl]);
+
   if (error && !info) {
     return (
       <View
@@ -324,11 +342,7 @@ export default function Info({route, navigation}: Props): React.JSX.Element {
                       ? () => setStoryVisible(true)
                       : undefined
                   }
-                  onOpenWeb={
-                    webUrl
-                      ? () => navigation.navigate('Webview', {link: webUrl})
-                      : undefined
-                  }
+                  onOpenWeb={webUrl ? handleOpenWeb : undefined}
                   onSearchTitle={searchTitle}
                   onToggleLibrary={toggleLibrary}
                   onToggleSynopsis={() => setReadMore(value => !value)}

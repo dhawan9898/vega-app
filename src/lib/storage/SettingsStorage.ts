@@ -72,7 +72,11 @@ export enum SettingsKeys {
   // ByeDPI Anti-DPI
   BYEDPI_ENABLED = 'byedpiEnabled',
   BYEDPI_CMD_ARGS = 'byedpiCmdArgs',
+
+  // Webview
+  SKIP_IN_APP_WEBVIEW = 'skipInAppWebview',
 }
+
 
 /**
  * Settings storage manager
@@ -458,6 +462,15 @@ export class SettingsStorage {
 
   setByeDpiCmdArgs(args: string): void {
     mainStorage.setString(SettingsKeys.BYEDPI_CMD_ARGS, args);
+  }
+
+  // Webview
+  isSkipInAppWebview(): boolean {
+    return mainStorage.getBool(SettingsKeys.SKIP_IN_APP_WEBVIEW, false);
+  }
+
+  setSkipInAppWebview(skip: boolean): void {
+    mainStorage.setBool(SettingsKeys.SKIP_IN_APP_WEBVIEW, skip);
   }
 }
 

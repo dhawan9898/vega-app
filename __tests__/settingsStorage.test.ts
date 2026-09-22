@@ -42,16 +42,16 @@ describe('settings defaults', () => {
     expect(settingsStorage.isSwipeGestureEnabled()).toBe(true);
     expect(settingsStorage.isTelemetryOptIn()).toBe(true);
     expect(settingsStorage.isDohEnabled()).toBe(true);
+    expect(settingsStorage.showTabBarLabels()).toBe(true);
     expect(settingsStorage.showPlayerEpisodeSidebar()).toBe(true);
   });
 
   it('keeps intentional default-off preferences disabled', () => {
-    expect(settingsStorage.showTabBarLabels()).toBe(false);
     expect(settingsStorage.hideDownloadsTab()).toBe(false);
     expect(settingsStorage.isAutoDownloadEnabled()).toBe(false);
     expect(settingsStorage.hideSeekButtons()).toBe(false);
     expect(settingsStorage.isEnable2xGestureEnabled()).toBe(false);
-    expect(settingsStorage.usePureBlackBackground()).toBe(false);
+    expect(settingsStorage.isSkipInAppWebview()).toBe(false);
   });
 
   it('defaults download concurrency to two and clamps saved values', () => {
@@ -71,13 +71,11 @@ describe('settings defaults', () => {
     expect(mockBooleanValues.get(SettingsKeys.HIDE_DOWNLOADS_TAB)).toBe(true);
   });
 
-  it('persists the pure black background preference', () => {
-    settingsStorage.setUsePureBlackBackground(true);
+  it('persists the skip in-app webview preference', () => {
+    settingsStorage.setSkipInAppWebview(true);
 
-    expect(settingsStorage.usePureBlackBackground()).toBe(true);
-    expect(mockBooleanValues.get(SettingsKeys.PURE_BLACK_BACKGROUND)).toBe(
-      true,
-    );
+    expect(settingsStorage.isSkipInAppWebview()).toBe(true);
+    expect(mockBooleanValues.get(SettingsKeys.SKIP_IN_APP_WEBVIEW)).toBe(true);
   });
 
   it('preserves explicit user opt-outs', () => {

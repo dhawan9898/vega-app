@@ -80,6 +80,10 @@ const Preferences = () => {
     settingsStorage.getBool('alwaysExternalDownloader') || false,
   );
 
+  const [skipInAppWebview, setSkipInAppWebview] = useState<boolean>(
+    settingsStorage.isSkipInAppWebview(),
+  );
+
   const [telemetryOptIn, setTelemetryOptIn] = useState<boolean>(
     settingsStorage.isTelemetryOptIn(),
   );
@@ -158,10 +162,19 @@ const Preferences = () => {
             title="External downloader"
             description="Send every download to another app"
             value={alwaysUseExternalDownload}
-            divider={false}
             onValueChange={next => {
               settingsStorage.setBool('alwaysExternalDownloader', next);
               setAlwaysUseExternalDownload(next);
+            }}
+          />
+          <SettingsSwitchRow
+            title="Skip in-app webview"
+            description="Open web links directly in your default browser"
+            value={skipInAppWebview}
+            divider={false}
+            onValueChange={next => {
+              settingsStorage.setSkipInAppWebview(next);
+              setSkipInAppWebview(next);
             }}
           />
         </SettingsSection>

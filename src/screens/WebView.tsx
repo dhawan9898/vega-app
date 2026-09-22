@@ -10,6 +10,7 @@ import {WebView} from 'react-native-webview';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {HomeStackParamList} from '../App';
 import {isSafeExternalUrl} from '../lib/sandbox/urlGuard';
+import {settingsStorage} from '../lib/storage';
 import IconButton from '../components/ui/IconButton';
 import AppText from '../components/ui/Text';
 
@@ -21,6 +22,19 @@ const Webview = ({route, navigation}: Props) => {
   const [canGoBack, setCanGoBack] = useState(false);
   const [canGoForward, setCanGoForward] = useState(false);
   const [currentUrl, setCurrentUrl] = useState(link);
+
+  useEffect(() => {
+    if (settingsStorage.isSkipInAppWebview()) {
+      if (link) {
+        Linking.openURL(link).catch(() => {
+          ToastAndroid.show('Failed to open browser', ToastAndroid.SHORT);
+        });
+      } else {
+        ToastAndroid.show('Unsupported link', ToastAndroid.SHORT);
+      }
+      navigation.goBack();
+    }
+  }, [link, navigation]);
 
   useEffect(() => {
     const subscription = BackHandler.addEventListener(
@@ -41,8 +55,14 @@ const Webview = ({route, navigation}: Props) => {
       ToastAndroid.show('Unsupported link', ToastAndroid.SHORT);
       return;
     }
-    Linking.openURL(currentUrl);
+    Linking.openURL(currentUrl).catch(() => {
+      ToastAndroid.show('Failed to open browser', ToastAndroid.SHORT);
+    });
   };
+
+  if (settingsStorage.isSkipInAppWebview()) {
+    return null;
+  }
 
   return (
     <SafeAreaView className="h-full w-full bg-m3-background">

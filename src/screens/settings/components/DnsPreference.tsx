@@ -52,12 +52,12 @@ const DnsPreference = () => {
       .then(res => {
         if (res.running && res.port) setWarpPort(res.port);
       })
-      .catch(() => {});
+      .catch(() => { });
     getByeDpiStatus()
       .then(res => {
         if (res.running && res.port) setByeDpiPort(res.port);
       })
-      .catch(() => {});
+      .catch(() => { });
   }, []);
 
   const initialProvider = settingsStorage.isDohEnabled()
@@ -258,7 +258,7 @@ const DnsPreference = () => {
             <View className="flex-1">
               <View className="flex-row items-center">
                 <AppText role="bodyLarge" className="text-m3-on-surface">
-                  ByeDPI Mode
+                  AntiDPI Mode
                 </AppText>
                 {byeDpiEnabled && byeDpiPort ? (
                   <View
@@ -275,7 +275,7 @@ const DnsPreference = () => {
               <AppText
                 role="bodySmall"
                 className="mt-0.5 text-m3-on-surface-variant">
-                Bypass ISP DPI restrictions without VPN
+                Bypass ISP blocking without VPN
               </AppText>
             </View>
           </View>
