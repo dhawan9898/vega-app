@@ -40,6 +40,7 @@ import Extensions from './screens/settings/Extensions';
 import Constants from 'expo-constants';
 import {settingsStorage} from './lib/storage';
 import {updateProvidersService} from './lib/services/UpdateProviders';
+import {ensureDefaultProviders} from './lib/services/DefaultProviders';
 import {QueryClientProvider} from '@tanstack/react-query';
 import {queryClient} from './lib/client';
 import GlobalErrorBoundary from './components/GlobalErrorBoundary';
@@ -307,6 +308,13 @@ const App = () => {
     return () => {
       unsubscribe();
     };
+  }, []);
+
+  // Seed the default provider source and install its providers on first run
+  useEffect(() => {
+    ensureDefaultProviders().catch(e =>
+      console.warn('[DefaultProviders] Startup seeding failed:', e),
+    );
   }, []);
 
   // Initialize update service
