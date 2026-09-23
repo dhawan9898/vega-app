@@ -1,6 +1,10 @@
-import {useEffect} from 'react';
-import {useQuery} from '@tanstack/react-query';
-import {getHomePageData, HomePageData} from '../getHomepagedata';
+import {useEffect, useRef} from 'react';
+import {useQuery, useQueryClient} from '@tanstack/react-query';
+import {
+  getHomePageData,
+  retryStaleProviders,
+  HomePageData,
+} from '../getHomepagedata';
 import {ProviderExtension} from '../storage/extensionStorage';
 import {cacheStorage} from '../storage';
 
@@ -8,6 +12,10 @@ interface UseHomePageDataOptions {
   installedProviders: Pick<ProviderExtension, 'value'>[];
   enabled?: boolean;
 }
+
+// Give the initial render a chance to settle before quietly retrying
+// whichever providers timed out, instead of hammering them immediately.
+const BACKGROUND_RETRY_DELAY_MS = 15_000;
 
 export const useHomePageData = ({
   installedProviders,
@@ -18,12 +26,23 @@ export const useHomePageData = ({
     .sort()
     .join(',');
   const cacheKey = 'homeData:' + providerKey;
+  const queryClient = useQueryClient();
+  const staleProviderValuesRef = useRef<string[]>([]);
+  const queryKey = ['homePageData', providerKey];
+
   const query = useQuery<HomePageData[], Error>({
-    queryKey: ['homePageData', providerKey],
+    queryKey,
     queryFn: async ({signal}) => {
-      // Fetch fresh data aggregated across every installed provider
-      const data = await getHomePageData(installedProviders, signal);
-      return data;
+      // Fetch fresh data aggregated across every installed provider. Cached
+      // per-provider results (from a prior successful load) back-fill any
+      // provider that times out this round, so Home shows what it can
+      // immediately instead of dropping content that used to be there.
+      const {sections, staleProviderValues} = await getHomePageData(
+        installedProviders,
+        signal,
+      );
+      staleProviderValuesRef.current = staleProviderValues;
+      return sections;
     },
     enabled: enabled && installedProviders.length > 0,
     staleTime: 0, // Mark stale immediately so it revalidates in the background
@@ -52,6 +71,34 @@ export const useHomePageData = ({
     refetchOnWindowFocus: false,
     refetchOnReconnect: 'always',
   });
+
+  // After a load leaves some providers stale (timed out), quietly retry just
+  // those in the background. If any come through, invalidate so the next
+  // aggregation (now warm-cached for them) re-merges them in. A retry that
+  // improves nothing doesn't reschedule itself - this isn't a polling loop.
+  useEffect(() => {
+    const staleValues = staleProviderValuesRef.current;
+    if (staleValues.length === 0) {
+      return;
+    }
+    staleProviderValuesRef.current = [];
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      retryStaleProviders(staleValues, controller.signal)
+        .then(improved => {
+          if (improved) {
+            queryClient.invalidateQueries({queryKey});
+          }
+        })
+        .catch(() => {});
+    }, BACKGROUND_RETRY_DELAY_MS);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query.dataUpdatedAt]);
 
   useEffect(() => {
     if (query.data && query.data.length > 0 && installedProviders.length > 0) {

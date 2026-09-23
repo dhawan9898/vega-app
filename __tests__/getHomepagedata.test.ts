@@ -1,4 +1,8 @@
-import {getHomePageData, HOME_SECTION_TITLES} from '../src/lib/getHomepagedata';
+import {
+  getHomePageData,
+  retryStaleProviders,
+  HOME_SECTION_TITLES,
+} from '../src/lib/getHomepagedata';
 
 const mockGetCatalog = jest.fn();
 const mockGetPosts = jest.fn();
@@ -10,10 +14,22 @@ jest.mock('../src/lib/services/ProviderManager', () => ({
   },
 }));
 
+const mockCacheStore = new Map<string, string>();
+
+jest.mock('../src/lib/storage', () => ({
+  cacheStorage: {
+    getString: (key: string) => mockCacheStore.get(key),
+    setString: (key: string, value: string) => {
+      mockCacheStore.set(key, value);
+    },
+  },
+}));
+
 describe('getHomePageData', () => {
   beforeEach(() => {
     mockGetCatalog.mockReset();
     mockGetPosts.mockReset();
+    mockCacheStore.clear();
   });
 
   it('merges the first catalog section from every provider into a shared "Recommended" section', async () => {
@@ -30,14 +46,15 @@ describe('getHomePageData', () => {
       return [{title: 'Beta Movie', link: '/b/1', image: ''}];
     });
 
-    const data = await getHomePageData(
+    const result = await getHomePageData(
       [{value: 'alpha'}, {value: 'beta'}],
       new AbortController().signal,
     );
 
-    expect(data).toHaveLength(1);
-    expect(data[0].title).toBe(HOME_SECTION_TITLES[0]);
-    expect(data[0].Posts.map(p => p.title)).toEqual([
+    expect(result.staleProviderValues).toEqual([]);
+    expect(result.sections).toHaveLength(1);
+    expect(result.sections[0].title).toBe(HOME_SECTION_TITLES[0]);
+    expect(result.sections[0].Posts.map(p => p.title)).toEqual([
       'Alpha Movie',
       'Beta Movie',
     ]);
@@ -54,13 +71,15 @@ describe('getHomePageData', () => {
       {title: 'Working Movie', link: '/w/1', image: ''},
     ]);
 
-    const data = await getHomePageData(
+    const result = await getHomePageData(
       [{value: 'broken'}, {value: 'working'}],
       new AbortController().signal,
     );
 
-    expect(data).toHaveLength(1);
-    expect(data[0].Posts.map(p => p.title)).toEqual(['Working Movie']);
+    expect(result.sections).toHaveLength(1);
+    expect(result.sections[0].Posts.map(p => p.title)).toEqual([
+      'Working Movie',
+    ]);
   });
 
   it('throws when no provider returns any content', async () => {
@@ -72,7 +91,7 @@ describe('getHomePageData', () => {
     ).rejects.toThrow('Failed to load any content from installed providers');
   });
 
-  it('does not let one hung provider block results from the rest beyond its own timeout', async () => {
+  it('does not let one hung provider block results from the rest beyond its own timeout, and reports it as stale', async () => {
     jest.useFakeTimers();
     try {
       mockGetCatalog.mockImplementation(async ({providerValue}) => {
@@ -92,9 +111,95 @@ describe('getHomePageData', () => {
 
       // Advance past the per-provider timeout without waiting 8 real seconds.
       await jest.advanceTimersByTimeAsync(8_000);
-      const data = await resultPromise;
+      const result = await resultPromise;
 
-      expect(data[0].Posts.map(p => p.title)).toEqual(['Fast Movie']);
+      expect(result.sections[0].Posts.map(p => p.title)).toEqual([
+        'Fast Movie',
+      ]);
+      expect(result.staleProviderValues).toEqual(['hung']);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('falls back to a provider\'s last cached posts when it times out, instead of dropping it', async () => {
+    // First run: "flaky" succeeds and gets cached.
+    mockGetCatalog.mockResolvedValue([{title: 'Popular', filter: 'popular'}]);
+    mockGetPosts.mockImplementation(async ({providerValue}) => [
+      {title: `${providerValue} Movie`, link: `/${providerValue}/1`, image: ''},
+    ]);
+
+    const firstRun = await getHomePageData(
+      [{value: 'flaky'}],
+      new AbortController().signal,
+    );
+    expect(firstRun.sections[0].Posts.map(p => p.title)).toEqual([
+      'flaky Movie',
+    ]);
+
+    // Second run: "flaky" now hangs. It should still contribute its
+    // previously cached post instead of vanishing from Home.
+    jest.useFakeTimers();
+    try {
+      mockGetCatalog.mockImplementation(() => new Promise(() => {}));
+
+      const secondRunPromise = getHomePageData(
+        [{value: 'flaky'}],
+        new AbortController().signal,
+      );
+      await jest.advanceTimersByTimeAsync(8_000);
+      const secondRun = await secondRunPromise;
+
+      expect(secondRun.sections[0].Posts.map(p => p.title)).toEqual([
+        'flaky Movie',
+      ]);
+      expect(secondRun.staleProviderValues).toEqual(['flaky']);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
+describe('retryStaleProviders', () => {
+  beforeEach(() => {
+    mockGetCatalog.mockReset();
+    mockGetPosts.mockReset();
+    mockCacheStore.clear();
+  });
+
+  it('returns false without calling anything when there is nothing stale', async () => {
+    const improved = await retryStaleProviders([], new AbortController().signal);
+
+    expect(improved).toBe(false);
+    expect(mockGetCatalog).not.toHaveBeenCalled();
+  });
+
+  it('returns true when a previously stale provider succeeds on retry', async () => {
+    mockGetCatalog.mockResolvedValue([{title: 'Popular', filter: 'popular'}]);
+    mockGetPosts.mockResolvedValue([
+      {title: 'Recovered Movie', link: '/r/1', image: ''},
+    ]);
+
+    const improved = await retryStaleProviders(
+      ['recovered'],
+      new AbortController().signal,
+    );
+
+    expect(improved).toBe(true);
+  });
+
+  it('returns false when the retry times out again', async () => {
+    jest.useFakeTimers();
+    try {
+      mockGetCatalog.mockImplementation(() => new Promise(() => {}));
+
+      const improvedPromise = retryStaleProviders(
+        ['still-down'],
+        new AbortController().signal,
+      );
+      await jest.advanceTimersByTimeAsync(8_000);
+
+      expect(await improvedPromise).toBe(false);
     } finally {
       jest.useRealTimers();
     }
