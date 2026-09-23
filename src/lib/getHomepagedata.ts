@@ -15,38 +15,63 @@ export interface HomePageData {
 // provider's first two catalog filters as "their" recommended + secondary
 // sections and merge same-named titles across providers into each one.
 export const HOME_SECTION_TITLES = ['Recommended for you', 'More to explore'];
-const PROVIDER_FETCH_CONCURRENCY = 6;
+const PROVIDER_FETCH_CONCURRENCY = 10;
 const POSTS_PER_SECTION_LIMIT = 30;
+// The sandbox itself allows a single invoke up to two minutes (legitimate
+// slow scraping). That's fine for a one-off action, but Home aggregates
+// across every installed provider - without a much shorter cap here, one
+// slow or dead provider would stall its whole concurrency batch for up to
+// two minutes before the rest could even be attempted.
+const PER_PROVIDER_TIMEOUT_MS = 8_000;
 
 const fetchProviderSections = async (
   providerValue: string,
-  signal: AbortSignal,
+  outerSignal: AbortSignal,
 ): Promise<Post[][]> => {
+  const controller = new AbortController();
+  const forwardAbort = () => controller.abort();
+  outerSignal.addEventListener('abort', forwardAbort);
+
+  const attempt = (async (): Promise<Post[][]> => {
+    try {
+      const catalog = await providerManager.getCatalog({providerValue});
+      const filters = catalog.slice(0, HOME_SECTION_TITLES.length);
+      return await Promise.all(
+        filters.map(async filter => {
+          try {
+            const posts = await providerManager.getPosts({
+              filter: filter.filter,
+              page: 1,
+              providerValue,
+              signal: controller.signal,
+            });
+            return posts || [];
+          } catch (error) {
+            console.error(
+              `Failed to load "${filter.title}" from ${providerValue}:`,
+              error,
+            );
+            return [];
+          }
+        }),
+      );
+    } catch (error) {
+      console.error(`Failed to load catalog for ${providerValue}:`, error);
+      return [];
+    }
+  })();
+
+  const timeout = new Promise<Post[][]>(resolve => {
+    setTimeout(() => {
+      controller.abort();
+      resolve([]);
+    }, PER_PROVIDER_TIMEOUT_MS);
+  });
+
   try {
-    const catalog = await providerManager.getCatalog({providerValue});
-    const filters = catalog.slice(0, HOME_SECTION_TITLES.length);
-    return await Promise.all(
-      filters.map(async filter => {
-        try {
-          const posts = await providerManager.getPosts({
-            filter: filter.filter,
-            page: 1,
-            providerValue,
-            signal,
-          });
-          return posts || [];
-        } catch (error) {
-          console.error(
-            `Failed to load "${filter.title}" from ${providerValue}:`,
-            error,
-          );
-          return [];
-        }
-      }),
-    );
-  } catch (error) {
-    console.error(`Failed to load catalog for ${providerValue}:`, error);
-    return [];
+    return await Promise.race([attempt, timeout]);
+  } finally {
+    outerSignal.removeEventListener('abort', forwardAbort);
   }
 };
 

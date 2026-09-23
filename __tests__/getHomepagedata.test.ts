@@ -71,4 +71,32 @@ describe('getHomePageData', () => {
       getHomePageData([{value: 'alpha'}], new AbortController().signal),
     ).rejects.toThrow('Failed to load any content from installed providers');
   });
+
+  it('does not let one hung provider block results from the rest beyond its own timeout', async () => {
+    jest.useFakeTimers();
+    try {
+      mockGetCatalog.mockImplementation(async ({providerValue}) => {
+        if (providerValue === 'hung') {
+          return new Promise(() => {}); // never resolves - simulates a dead provider
+        }
+        return [{title: 'Popular', filter: 'popular'}];
+      });
+      mockGetPosts.mockResolvedValue([
+        {title: 'Fast Movie', link: '/f/1', image: ''},
+      ]);
+
+      const resultPromise = getHomePageData(
+        [{value: 'hung'}, {value: 'fast'}],
+        new AbortController().signal,
+      );
+
+      // Advance past the per-provider timeout without waiting 8 real seconds.
+      await jest.advanceTimersByTimeAsync(8_000);
+      const data = await resultPromise;
+
+      expect(data[0].Posts.map(p => p.title)).toEqual(['Fast Movie']);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
 });
