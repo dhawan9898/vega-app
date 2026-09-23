@@ -1,5 +1,5 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import {useNavigation} from '@react-navigation/native';
+import {NavigationProp, useNavigation} from '@react-navigation/native';
 import {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import React, {
   memo,
@@ -15,7 +15,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import Animated, {FadeIn, FadeInDown} from 'react-native-reanimated';
 import {SafeAreaView, useSafeAreaInsets} from 'react-native-safe-area-context';
 import debounce from 'lodash/debounce';
-import {HomeStackParamList} from '../App';
+import {HomeStackParamList, RootStackParamList} from '../App';
 import {useHeroMetadata} from '../lib/hooks/useHomePageData';
 import useContentStore from '../lib/zustand/contentStore';
 import useHeroStore from '../lib/zustand/herostore';
@@ -29,11 +29,6 @@ import SearchSuggestions from './search/SearchSuggestions';
 import Button from './ui/Button';
 import SearchField, {type SearchFieldRef} from './ui/SearchField';
 import AppText from './ui/Text';
-
-interface HeroProps {
-  isDrawerOpen: boolean;
-  onOpenDrawer: () => void;
-}
 
 const IMAGE_COLOR_FALLBACK = '#FFFFFF';
 
@@ -79,7 +74,7 @@ const HeroTopButton = ({
   </Pressable>
 );
 
-const Hero = memo(({isDrawerOpen, onOpenDrawer}: HeroProps) => {
+const Hero = memo(() => {
   const colors = useM3Colors();
   const insets = useSafeAreaInsets();
   const [logoFailed, setLogoFailed] = useState(false);
@@ -92,9 +87,10 @@ const Hero = memo(({isDrawerOpen, onOpenDrawer}: HeroProps) => {
   const hero = useHeroStore(state => state.hero);
   const navigation =
     useNavigation<NativeStackNavigationProp<HomeStackParamList>>();
+  const heroProviderValue = hero?.provider || provider.value;
   const {data: heroData, error} = useHeroMetadata(
     hero?.link || '',
-    provider.value,
+    heroProviderValue,
   );
 
   const imageSource = useMemo(
@@ -208,11 +204,11 @@ const Hero = memo(({isDrawerOpen, onOpenDrawer}: HeroProps) => {
     }
     navigation.navigate('Info', {
       link: hero.link,
-      provider: provider.value,
+      provider: heroProviderValue,
       poster: heroData?.poster || heroData?.image || heroData?.background,
     });
-  }, [hero, heroData, navigation, provider.value]);
-  const submitProviderSearch = useCallback(
+  }, [hero, heroData, navigation, heroProviderValue]);
+  const submitGlobalSearch = useCallback(
     (value: string) => {
       const query = value.trim();
       if (!query) {
@@ -228,14 +224,17 @@ const Hero = memo(({isDrawerOpen, onOpenDrawer}: HeroProps) => {
         });
         return;
       }
-      navigation.navigate('ScrollList', {
-        providerValue: provider.value,
-        filter: query,
-        title: provider.display_name,
-        isSearch: true,
-      });
+      // Search every installed provider instead of just the one previously
+      // selected as "active" - hand off to the shared Search tab flow.
+      (navigation as unknown as NavigationProp<RootStackParamList>).navigate(
+        'TabStack',
+        {
+          screen: 'SearchStack',
+          params: {screen: 'SearchResults', params: {filter: query} as any},
+        },
+      );
     },
-    [navigation, provider.display_name, provider.value],
+    [navigation, provider.value],
   );
 
   return (
@@ -276,23 +275,16 @@ const Hero = memo(({isDrawerOpen, onOpenDrawer}: HeroProps) => {
         style={{
           alignItems: 'center',
           flexDirection: 'row',
-          justifyContent: 'space-between',
+          justifyContent: 'flex-end',
           left: 16,
           position: 'absolute',
           right: 16,
           top: insets.top + 6,
         }}>
         <HeroTopButton
-          icon="menu"
-          iconColor={searchButtonColor}
-          label="Open provider drawer"
-          disabled={isDrawerOpen}
-          onPress={onOpenDrawer}
-        />
-        <HeroTopButton
           icon="magnify"
           iconColor={searchButtonColor}
-          label={`Search in ${provider.display_name}`}
+          label="Search across all providers"
           onPress={() => setSearchActive(true)}
         />
       </View>
@@ -433,8 +425,8 @@ const Hero = memo(({isDrawerOpen, onOpenDrawer}: HeroProps) => {
                 ref={searchFieldRef}
                 value={searchText}
                 onChangeText={handleTextChange}
-                onSubmit={submitProviderSearch}
-                placeholder={`Search in ${provider.display_name}...`}
+                onSubmit={submitGlobalSearch}
+                placeholder="Search across all providers..."
               />
             </View>
 

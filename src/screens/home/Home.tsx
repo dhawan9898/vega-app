@@ -1,9 +1,8 @@
 import {SafeAreaView, ScrollView, RefreshControl, View} from 'react-native';
 import Slider from '../../components/Slider';
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useMemo, useState} from 'react';
 import {useFocusEffect} from '@react-navigation/native';
 import HeroOptimized from '../../components/Hero';
-import {mainStorage} from '../../lib/storage';
 import useContentStore from '../../lib/zustand/contentStore';
 import useHeroStore from '../../lib/zustand/herostore';
 import {syncFromSharedFolder} from '../../lib/sync/syncService';
@@ -12,13 +11,10 @@ import {
   getRandomHeroPost,
   clearHeroCache,
 } from '../../lib/hooks/useHomePageData';
-import ProviderDrawer from '../../components/ProviderDrawer';
 import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {HomeStackParamList} from '../../App';
-import {Drawer} from 'react-native-drawer-layout';
 import {GestureHandlerRootView} from 'react-native-gesture-handler';
-import {providerManager} from '../../lib/services/ProviderManager';
-import {Catalog} from '../../lib/providers/types';
+import {HOME_SECTION_TITLES} from '../../lib/getHomepagedata';
 import Tutorial from '../../components/Touturial';
 import {QueryErrorBoundary} from '../../components/ErrorBoundary';
 import {StatusBar} from 'expo-status-bar';
@@ -32,21 +28,14 @@ type Props = NativeStackScreenProps<HomeStackParamList, 'Home'>;
 const Home = ({}: Props) => {
   const colors = useM3Colors();
   const [statusBarScrimVisible, setStatusBarScrimVisible] = useState(false);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const [isAtTop, setIsAtTop] = useState(true);
 
-  // Memoize static values
-  const disableDrawer = useMemo(
-    () => mainStorage.getBool('disableDrawer') || false,
-    [],
-  );
-
-  const provider = useContentStore(state => state.provider);
   const installedProviders = useContentStore(state => state.installedProviders);
   const setHero = useHeroStore(state => state.setHero);
 
-  // React Query for home page data with better error handling
+  // React Query for home page data, aggregated across every installed
+  // provider rather than a single manually-selected one.
   const {
     data: homeData = [],
     isLoading,
@@ -55,8 +44,8 @@ const Home = ({}: Props) => {
     isRefetching,
     // isStale,
   } = useHomePageData({
-    provider,
-    enabled: !!(installedProviders?.length && provider?.value),
+    installedProviders,
+    enabled: !!installedProviders?.length,
   });
 
   // Memoized scroll handler
@@ -66,13 +55,14 @@ const Home = ({}: Props) => {
     setIsAtTop(offsetY <= 0);
   }, []);
 
-  // Stable hero post calculation - uses provider value for caching
+  // Stable hero post calculation - aggregated data uses a fixed cache key
+  // since it is no longer tied to a single selected provider.
   const heroPost = useMemo(() => {
     if (!homeData || homeData.length === 0) {
       return null;
     }
-    return getRandomHeroPost(homeData, provider?.value);
-  }, [homeData, provider?.value]);
+    return getRandomHeroPost(homeData, 'aggregated');
+  }, [homeData]);
 
   // Update hero only when hero post actually changes
   React.useEffect(() => {
@@ -96,7 +86,7 @@ const Home = ({}: Props) => {
     setManualRefreshing(true);
     try {
       // Clear hero cache to get a new random hero on refresh
-      clearHeroCache(provider?.value);
+      clearHeroCache('aggregated');
       await Promise.race([
         Promise.allSettled([
           refetch(),
@@ -113,47 +103,22 @@ const Home = ({}: Props) => {
         setManualRefreshing(false);
       }, 50);
     }
-  }, [refetch, provider?.value]);
+  }, [refetch]);
 
-  // Catalog now runs in the provider sandbox, so it resolves asynchronously.
-  const [skeletonCatalog, setSkeletonCatalog] = useState<Catalog[]>([]);
-
-  useEffect(() => {
-    if (!provider?.value) {
-      setSkeletonCatalog([]);
-      return;
-    }
-    let cancelled = false;
-    providerManager
-      .getCatalog({providerValue: provider.value})
-      .then(catalog => {
-        if (!cancelled) {
-          setSkeletonCatalog(catalog);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setSkeletonCatalog([]);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [provider?.value]);
-
-  // Memoized loading skeleton
+  // Section titles are fixed (aggregated across providers), so the loading
+  // skeleton can render immediately instead of waiting on a catalog fetch.
   const loadingSliders = useMemo(
     () =>
-      skeletonCatalog.map((item, index) => (
+      HOME_SECTION_TITLES.map((title, index) => (
         <Slider
           isLoading={true}
-          key={`loading-${item.filter}-${index}`}
-          title={item.title}
+          key={`loading-${title}-${index}`}
+          title={title}
           posts={[]}
-          filter={item.filter}
+          filter={title}
         />
       )),
-    [skeletonCatalog],
+    [],
   );
 
   // Memoized content sliders
@@ -192,11 +157,7 @@ const Home = ({}: Props) => {
   }, [error, isLoading, homeData.length]);
 
   // Early return for no providers
-  if (
-    !installedProviders ||
-    installedProviders.length === 0 ||
-    !provider?.value
-  ) {
+  if (!installedProviders || installedProviders.length === 0) {
     return <Tutorial />;
   }
 
@@ -205,52 +166,34 @@ const Home = ({}: Props) => {
       <GestureHandlerRootView style={{flex: 1}}>
         <StatusBarScrim visible={statusBarScrimVisible} />
         <SafeAreaView className="flex-1 bg-m3-background">
-          <Drawer
-            open={isDrawerOpen}
-            onOpen={() => setIsDrawerOpen(true)}
-            onClose={() => setIsDrawerOpen(false)}
-            drawerPosition="left"
-            drawerType="front"
-            drawerStyle={{width: 200, backgroundColor: 'transparent'}}
-            swipeEdgeWidth={disableDrawer ? 0 : 70}
-            swipeEnabled={!disableDrawer}
-            renderDrawerContent={() =>
-              !disableDrawer ? (
-                <ProviderDrawer onClose={() => setIsDrawerOpen(false)} />
-              ) : null
-            }>
-            <StatusBar style="light" />
+          <StatusBar style="light" />
 
-            <ScrollView
-              onScroll={handleScroll}
-              scrollEventThrottle={16} // Optimize scroll performance
-              showsVerticalScrollIndicator={false}
-              className="bg-m3-background"
-              refreshControl={
-                <RefreshControl
-                  colors={[colors.primary]}
-                  tintColor={colors.primary}
-                  progressBackgroundColor={colors.surfaceContainer}
-                  refreshing={manualRefreshing}
-                  onRefresh={handleRefresh}
-                  enabled={isAtTop || manualRefreshing}
-                />
-              }>
-              <HeroOptimized
-                isDrawerOpen={isDrawerOpen}
-                onOpenDrawer={() => setIsDrawerOpen(true)}
+          <ScrollView
+            onScroll={handleScroll}
+            scrollEventThrottle={16} // Optimize scroll performance
+            showsVerticalScrollIndicator={false}
+            className="bg-m3-background"
+            refreshControl={
+              <RefreshControl
+                colors={[colors.primary]}
+                tintColor={colors.primary}
+                progressBackgroundColor={colors.surfaceContainer}
+                refreshing={manualRefreshing}
+                onRefresh={handleRefresh}
+                enabled={isAtTop || manualRefreshing}
               />
+            }>
+            <HeroOptimized />
 
-              <ContinueWatching />
+            <ContinueWatching />
 
-              <View className="relative z-20 pb-8">
-                {isLoading ? loadingSliders : contentSliders}
-                {errorComponent}
-              </View>
+            <View className="relative z-20 pb-8">
+              {isLoading ? loadingSliders : contentSliders}
+              {errorComponent}
+            </View>
 
-              <View className="h-8" />
-            </ScrollView>
-          </Drawer>
+            <View className="h-8" />
+          </ScrollView>
         </SafeAreaView>
       </GestureHandlerRootView>
     </QueryErrorBoundary>

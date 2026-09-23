@@ -1,27 +1,31 @@
 import {useEffect} from 'react';
 import {useQuery} from '@tanstack/react-query';
 import {getHomePageData, HomePageData} from '../getHomepagedata';
-import {Content} from '../zustand/contentStore';
+import {ProviderExtension} from '../storage/extensionStorage';
 import {cacheStorage} from '../storage';
 
 interface UseHomePageDataOptions {
-  provider: Content['provider'];
+  installedProviders: Pick<ProviderExtension, 'value'>[];
   enabled?: boolean;
 }
 
 export const useHomePageData = ({
-  provider,
+  installedProviders,
   enabled = true,
 }: UseHomePageDataOptions) => {
-  const cacheKey = 'homeData' + (provider?.value || '');
+  const providerKey = installedProviders
+    .map(item => item.value)
+    .sort()
+    .join(',');
+  const cacheKey = 'homeData:' + providerKey;
   const query = useQuery<HomePageData[], Error>({
-    queryKey: ['homePageData', provider.value],
+    queryKey: ['homePageData', providerKey],
     queryFn: async ({signal}) => {
-      // Fetch fresh data from provider
-      const data = await getHomePageData(provider, signal);
+      // Fetch fresh data aggregated across every installed provider
+      const data = await getHomePageData(installedProviders, signal);
       return data;
     },
-    enabled: enabled && !!provider?.value,
+    enabled: enabled && installedProviders.length > 0,
     staleTime: 0, // Mark stale immediately so it revalidates in the background
     gcTime: 60 * 60 * 1000, // 1 hour
     retry: (failureCount, error) => {
@@ -50,10 +54,10 @@ export const useHomePageData = ({
   });
 
   useEffect(() => {
-    if (query.data && query.data.length > 0 && provider?.value) {
+    if (query.data && query.data.length > 0 && installedProviders.length > 0) {
       cacheStorage.setString(cacheKey, JSON.stringify(query.data));
     }
-  }, [cacheKey, provider?.value, query.data]);
+  }, [cacheKey, installedProviders.length, query.data]);
 
   return query;
 };
