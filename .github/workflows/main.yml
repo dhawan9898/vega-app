@@ -165,6 +165,13 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
+      # Generate the native android/ project (not committed to git) before
+      # this job tries to sign and build it. Default variant (no
+      # APP_VARIANT set) is "standalone" - the sideloadable package this
+      # release is distributed as.
+      - name: Generate native project
+        run: npx expo prebuild --platform android --clean --no-install
+
       # Decode the keystore from your secret
       - name: Decode keystore
         run: |
