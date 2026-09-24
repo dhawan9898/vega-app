@@ -242,5 +242,27 @@ const MediaPosterCard = ({
   );
 };
 
-export default MediaPosterCard;
+// List callers (Slider, WatchList, Downloads, ContinueWatching) pass a
+// fresh onPress/onLongPress closure per render, since they close over the
+// current list item. That's expected and doesn't change what pressing the
+// card does for a given item, so it's excluded here - otherwise every card
+// on screen would re-render on every list refresh even when its own title,
+// poster, and layout are unchanged.
+const arePropsEqual = (
+  prev: MediaPosterCardProps,
+  next: MediaPosterCardProps,
+): boolean =>
+  prev.title === next.title &&
+  prev.poster === next.poster &&
+  prev.width === next.width &&
+  prev.subtitle === next.subtitle &&
+  prev.badge === next.badge &&
+  prev.aspectRatio === next.aspectRatio &&
+  prev.borderRadius === next.borderRadius &&
+  prev.tag === next.tag &&
+  prev.cornerTag === next.cornerTag &&
+  prev.selected === next.selected &&
+  prev.selectionMode === next.selectionMode;
+
+export default React.memo(MediaPosterCard, arePropsEqual);
 

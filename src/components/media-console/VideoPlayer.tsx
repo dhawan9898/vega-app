@@ -469,20 +469,14 @@ const AnimatedVideoPlayer = (
 
   const seekVideo = useCallback((time: number) => {
     try {
-      console.log('seekVideo called with time:', time);
-      console.log('videoRef.current:', !!videoRef?.current);
-      console.log('videoRef.current.seek:', !!videoRef?.current?.seek);
-
       if (
         videoRef?.current?.seek &&
         typeof videoRef.current.seek === 'function'
       ) {
-        console.log('Calling videoRef.current.seek with time:', time);
         // Try seeking with tolerance parameter for better compatibility
         videoRef.current.seek(time, 100);
       } else if (videoRef?.current) {
         // Fallback: try calling seek directly on the ref if available
-        console.log('Trying fallback seek method');
         (videoRef.current as any).seek?.(time);
       } else {
         console.warn('Video seek function not available', {

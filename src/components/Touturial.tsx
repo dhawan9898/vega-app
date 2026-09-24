@@ -18,9 +18,8 @@ import * as DocumentPicker from 'expo-document-picker';
 const Tutorial = () => {
   const navigation = useNavigation<NavigationProp<RootStackParamList>>();
   const colors = useM3Colors();
-  const {provider: currentProvider, installedProviders} = useContentStore(
-    state => state,
-  );
+  const currentProvider = useContentStore(state => state.provider);
+  const installedProviders = useContentStore(state => state.installedProviders);
   const [showTutorial, setShowTutorial] = useState<boolean>(!currentProvider);
 
   // Handle default provider setup
