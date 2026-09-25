@@ -23,10 +23,6 @@ import Animated, {
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import { cacheStorage, settingsStorage } from '../../lib/storage';
-import Orientation, {
-  OrientationLocker,
-  LANDSCAPE,
-} from 'react-native-orientation-locker';
 import { SystemBars } from 'react-native-edge-to-edge';
 import VideoPlayer from '../../components/media-console';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
@@ -1432,28 +1428,25 @@ const Player = ({ route }: Props): React.JSX.Element => {
     watchedDuration,
   ]);
 
-  // Enter landscape and fullscreen on mount & focus, and restore on unmount
+  // Enter fullscreen on mount & focus, and restore on unmount. Orientation
+  // is owned solely by the navigator's `orientation: 'landscape'` screen
+  // option (App.tsx) - react-native-screens locks and restores it on the
+  // native Fragment's own attach/detach lifecycle. This screen used to also
+  // call react-native-orientation-locker's lockToLandscape/
+  // unlockAllOrientations imperatively (plus a declarative <OrientationLocker>
+  // in the render tree below), and having two libraries fight over the same
+  // Activity orientation property was leaving the app stuck unable to
+  // auto-rotate after leaving the player, depending on unmount ordering.
   useFocusEffect(
     useCallback(() => {
-      Orientation.lockToLandscape();
       goFullScreen();
       reapplyFullscreenMode(isFullScreenRef.current);
 
       return () => {
-        Orientation.unlockAllOrientations();
         exitFullScreen();
       };
     }, []),
   );
-
-  useEffect(() => {
-    Orientation.lockToLandscape();
-    goFullScreen();
-    return () => {
-      Orientation.unlockAllOrientations();
-      exitFullScreen();
-    };
-  }, []);
 
   useEffect(() => {
     isFullScreenRef.current = isFullScreen;
@@ -1910,7 +1903,6 @@ const Player = ({ route }: Props): React.JSX.Element => {
         className="bg-black flex-1 justify-center items-center">
         <SystemBars hidden={true} />
         <StatusBar translucent={true} hidden={true} />
-        <OrientationLocker orientation={LANDSCAPE} />
         {/* create ripple effect */}
         <TouchableNativeFeedback
           background={TouchableNativeFeedback.Ripple(
@@ -1938,7 +1930,6 @@ const Player = ({ route }: Props): React.JSX.Element => {
       <SafeAreaView className="bg-black flex-1 justify-center items-center">
         <SystemBars hidden={true} />
         <StatusBar translucent={true} hidden={true} />
-        <OrientationLocker orientation={LANDSCAPE} />
         <Text className="text-red-500 text-lg text-center mb-4">
           Failed to load stream. Please try again.
         </Text>
@@ -1962,7 +1953,6 @@ const Player = ({ route }: Props): React.JSX.Element => {
       className="bg-black flex-1 relative">
       <SystemBars hidden={isFullScreen} />
       <StatusBar translucent={true} hidden={true} />
-      <OrientationLocker orientation={LANDSCAPE} />
 
       {/* Local or Cast player */}
       {remoteMediaClient ? (
