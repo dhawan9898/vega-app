@@ -122,6 +122,12 @@ jobs:
     permissions:
       # Need these permissions for creating GitHub releases
       contents: write
+    env:
+      # with-jvm-args.js defaults to 3072m, tuned for memory-constrained
+      # local dev hosts (e.g. WSL2). This runner has more headroom (~7GB),
+      # and R8 minification + packaging on this app's many native modules
+      # needs more than 3GB or :app:packageRelease OOMs.
+      GRADLE_JVM_HEAP_MB: '5120'
 
     steps:
       - name: Checkout specific branch
