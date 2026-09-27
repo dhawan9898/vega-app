@@ -675,7 +675,17 @@ const App = () => {
                     freezeOnBlur: true,
                     contentStyle: {backgroundColor: 'transparent'},
                   }}>
-                  <Stack.Screen name="TabStack" component={TabStack} />
+                  <Stack.Screen
+                    name="TabStack"
+                    component={TabStack}
+                    // react-native-screens only actively enforces orientation
+                    // for a screen that declares it. Player explicitly locks
+                    // to landscape; without an explicit value here too, there
+                    // was nothing telling Android to revert away from that
+                    // once Player unmounts, so the whole app stayed stuck in
+                    // landscape after leaving the player.
+                    options={{orientation: 'portrait'}}
+                  />
                   <Stack.Screen
                     name="Player"
                     component={Player}

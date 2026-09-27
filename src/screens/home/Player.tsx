@@ -1784,14 +1784,25 @@ const Player = ({ route }: Props): React.JSX.Element => {
             : selectedStream.link) || '',
         bufferConfig: {
           minBufferMs: 8000,
-          maxBufferMs: 20000,
+          // Sources here are third-party scrapers behind WAF/DPI-evasion
+          // infra, not a stable CDN - a bigger forward cushion once
+          // buffering is healthy means a brief slowdown drains from spare
+          // buffer instead of immediately stalling playback.
+          maxBufferMs: 30000,
           bufferForPlaybackMs: 1500,
-          bufferForPlaybackAfterRebufferMs: 3000,
+          // Recover from a stall a bit sooner - 3s of re-buffering before
+          // resuming was more conservative than this needs.
+          bufferForPlaybackAfterRebufferMs: 2000,
           backBufferDurationMs: 0,
-          maxHeapAllocationPercent: 0.18,
+          // Raised alongside maxBufferMs - the larger buffer window is
+          // pointless if ExoPlayer is still heap-capped to the old ceiling.
+          maxHeapAllocationPercent: 0.3,
           minBufferMemoryReservePercent: 0.2,
           minBackBufferMemoryReservePercent: 0.25,
-          cacheSizeMB: 0,
+          // Was disabled entirely; a modest on-disk cache means a seek back
+          // into already-buffered range, or reopening the same episode,
+          // reads from disk instead of re-fetching from the source.
+          cacheSizeMB: 200,
         },
         shouldCache: true,
         ...(selectedStream?.type === 'm3u8' && { type: 'm3u8' }),
@@ -2597,26 +2608,11 @@ const Player = ({ route }: Props): React.JSX.Element => {
                         : track.width
                           ? `${track.width}p`
                           : 'Standard';
-                      const bitrateText = track.bitrate
-                        ? track.bitrate >= 1000000
-                          ? `${(track.bitrate / 1000000).toFixed(1)} Mbps`
-                          : `${Math.round(track.bitrate / 1000)} kbps`
-                        : undefined;
-                      const detailText = [
-                        bitrateText,
-                        track.width &&
-                        track.height &&
-                        `${track.width}x${track.height}`,
-                        track.codecs && `${track.codecs}`,
-                      ]
-                        .filter(Boolean)
-                        .join(' · ');
 
                       return (
                         <PlayerMenuRow
                           key={i}
                           title={resolutionTitle}
-                          detail={detailText}
                           selected={selectedQualityIndex === i}
                           accentColor={primary}
                           icon={getQualityIconName(track.height)}

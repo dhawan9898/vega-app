@@ -8,6 +8,8 @@ import useHeroStore from '../../lib/zustand/herostore';
 import {syncFromSharedFolder} from '../../lib/sync/syncService';
 import {
   useHomePageData,
+  useCategoryCatalog,
+  useCategoryHomeData,
   getRandomHeroPost,
   clearHeroCache,
 } from '../../lib/hooks/useHomePageData';
@@ -22,6 +24,9 @@ import AppText from '../../components/ui/Text';
 import {useM3Colors} from '../../theme/M3PaletteContext';
 import ContinueWatching from '../../components/ContinueWatching';
 import StatusBarScrim from '../../components/ui/StatusBarScrim';
+import CategoryBar, {
+  FOR_YOU_CATEGORY_ID,
+} from '../../components/home/CategoryBar';
 
 type Props = NativeStackScreenProps<HomeStackParamList, 'Home'>;
 
@@ -33,6 +38,8 @@ const Home = ({}: Props) => {
 
   const installedProviders = useContentStore(state => state.installedProviders);
   const setHero = useHeroStore(state => state.setHero);
+  const [selectedCategoryId, setSelectedCategoryId] =
+    useState<string>(FOR_YOU_CATEGORY_ID);
 
   // React Query for home page data, aggregated across every installed
   // provider rather than a single manually-selected one.
@@ -47,6 +54,53 @@ const Home = ({}: Props) => {
     installedProviders,
     enabled: !!installedProviders?.length,
   });
+
+  // Netflix-style top bar: "For You" plus Movies / TV Shows / genre chips
+  // discovered across every installed provider's own catalog and genres.
+  const {data: categoryCatalog} = useCategoryCatalog({
+    installedProviders,
+    enabled: !!installedProviders?.length,
+  });
+  const categoryOptions = useMemo(
+    () => categoryCatalog?.options ?? [],
+    [categoryCatalog],
+  );
+  const selectedCategory = useMemo(
+    () =>
+      selectedCategoryId === FOR_YOU_CATEGORY_ID
+        ? null
+        : categoryOptions.find(option => option.id === selectedCategoryId) ??
+          null,
+    [categoryOptions, selectedCategoryId],
+  );
+  const selectedCategoryFilters = useMemo(
+    () =>
+      (selectedCategory &&
+        categoryCatalog?.filtersByCategory.get(selectedCategory.id)) ||
+      [],
+    [categoryCatalog, selectedCategory],
+  );
+  const {
+    data: categoryData,
+    isLoading: isCategoryLoading,
+    error: categoryError,
+  } = useCategoryHomeData({
+    category: selectedCategory,
+    providerFilters: selectedCategoryFilters,
+    enabled: !!selectedCategory,
+  });
+
+  // Reset back to "For You" if the currently selected chip disappears (e.g.
+  // providers changed and no longer expose that genre).
+  React.useEffect(() => {
+    if (
+      selectedCategoryId !== FOR_YOU_CATEGORY_ID &&
+      categoryCatalog &&
+      !categoryOptions.some(option => option.id === selectedCategoryId)
+    ) {
+      setSelectedCategoryId(FOR_YOU_CATEGORY_ID);
+    }
+  }, [categoryCatalog, categoryOptions, selectedCategoryId]);
 
   // Memoized scroll handler
   const handleScroll = useCallback((event: any) => {
@@ -134,9 +188,32 @@ const Home = ({}: Props) => {
     ));
   }, [homeData]);
 
+  // When a category chip other than "For You" is selected, show its single
+  // merged section instead of the default aggregated feed.
+  const categorySlider = useMemo(() => {
+    if (!selectedCategory) {
+      return null;
+    }
+    return (
+      <Slider
+        isLoading={isCategoryLoading && !categoryData}
+        key={`category-${selectedCategory.id}`}
+        title={selectedCategory.label}
+        posts={categoryData?.Posts ?? []}
+        filter={selectedCategory.id}
+      />
+    );
+  }, [selectedCategory, isCategoryLoading, categoryData]);
+
+  const activeError = selectedCategory ? categoryError : error;
+  const activeIsLoading = selectedCategory ? isCategoryLoading : isLoading;
+  const activeHasData = selectedCategory
+    ? (categoryData?.Posts.length ?? 0) > 0
+    : homeData.length > 0;
+
   // Memoized error message - only show if there is no cached data and an error occurred
   const errorComponent = useMemo(() => {
-    if (homeData.length > 0 || isLoading || !error) {
+    if (activeHasData || activeIsLoading || !activeError) {
       return null;
     }
 
@@ -145,7 +222,7 @@ const Home = ({}: Props) => {
         <AppText
           role="titleMediumEmphasized"
           className="text-center text-m3-on-error-container">
-          {error?.message || 'Failed to load content'}
+          {activeError?.message || 'Failed to load content'}
         </AppText>
         <AppText
           role="bodyMedium"
@@ -154,7 +231,7 @@ const Home = ({}: Props) => {
         </AppText>
       </View>
     );
-  }, [error, isLoading, homeData.length]);
+  }, [activeError, activeIsLoading, activeHasData]);
 
   // Early return for no providers
   if (!installedProviders || installedProviders.length === 0) {
@@ -187,8 +264,18 @@ const Home = ({}: Props) => {
 
             <ContinueWatching />
 
+            <CategoryBar
+              options={categoryOptions}
+              selectedId={selectedCategoryId}
+              onSelect={setSelectedCategoryId}
+            />
+
             <View className="relative z-20 pb-8">
-              {isLoading ? loadingSliders : contentSliders}
+              {selectedCategory
+                ? categorySlider
+                : isLoading
+                  ? loadingSliders
+                  : contentSliders}
               {errorComponent}
             </View>
 

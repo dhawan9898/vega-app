@@ -1,16 +1,20 @@
 import {
   getHomePageData,
   retryStaleProviders,
+  getCategoryCatalog,
+  getHomePageDataForCategory,
   HOME_SECTION_TITLES,
 } from '../src/lib/getHomepagedata';
 
 const mockGetCatalog = jest.fn();
 const mockGetPosts = jest.fn();
+const mockGetGenres = jest.fn();
 
 jest.mock('../src/lib/services/ProviderManager', () => ({
   providerManager: {
     getCatalog: (...args: unknown[]) => mockGetCatalog(...args),
     getPosts: (...args: unknown[]) => mockGetPosts(...args),
+    getGenres: (...args: unknown[]) => mockGetGenres(...args),
   },
 }));
 
@@ -200,6 +204,188 @@ describe('retryStaleProviders', () => {
       await jest.advanceTimersByTimeAsync(8_000);
 
       expect(await improvedPromise).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
+describe('getCategoryCatalog', () => {
+  beforeEach(() => {
+    mockGetCatalog.mockReset();
+    mockGetGenres.mockReset();
+    mockCacheStore.clear();
+  });
+
+  it('adds a Movies chip when at least one provider has a movies catalog entry', async () => {
+    mockGetCatalog.mockImplementation(async ({providerValue}) =>
+      providerValue === 'alpha'
+        ? [{title: 'Movies', filter: 'movies'}]
+        : [{title: 'Popular', filter: 'popular'}],
+    );
+    mockGetGenres.mockResolvedValue([]);
+
+    const {options, filtersByCategory} = await getCategoryCatalog(
+      [{value: 'alpha'}, {value: 'beta'}],
+      new AbortController().signal,
+    );
+
+    expect(options).toContainEqual({id: '__movies', label: 'Movies'});
+    expect(filtersByCategory.get('__movies')).toEqual([
+      {providerValue: 'alpha', filter: 'movies'},
+    ]);
+  });
+
+  it('adds a TV Shows chip when a provider catalog or genre title matches show keywords', async () => {
+    mockGetCatalog.mockResolvedValue([]);
+    mockGetGenres.mockImplementation(async ({providerValue}) =>
+      providerValue === 'alpha'
+        ? [{title: 'TV Shows', filter: 'tv-shows'}]
+        : [],
+    );
+
+    const {options} = await getCategoryCatalog(
+      [{value: 'alpha'}, {value: 'beta'}],
+      new AbortController().signal,
+    );
+
+    expect(options).toContainEqual({id: '__tv_shows', label: 'TV Shows'});
+  });
+
+  it('only turns a genre into a chip once at least 2 providers share it', async () => {
+    mockGetCatalog.mockResolvedValue([]);
+    mockGetGenres.mockImplementation(async ({providerValue}) => {
+      if (providerValue === 'alpha' || providerValue === 'beta') {
+        return [{title: 'Action', filter: 'action'}];
+      }
+      return [{title: 'Solo Genre', filter: 'solo'}];
+    });
+
+    const {options, filtersByCategory} = await getCategoryCatalog(
+      [{value: 'alpha'}, {value: 'beta'}, {value: 'gamma'}],
+      new AbortController().signal,
+    );
+
+    expect(options.some(o => o.label === 'Action')).toBe(true);
+    expect(options.some(o => o.label === 'Solo Genre')).toBe(false);
+    const actionOption = options.find(o => o.label === 'Action')!;
+    expect(filtersByCategory.get(actionOption.id)).toEqual([
+      {providerValue: 'alpha', filter: 'action'},
+      {providerValue: 'beta', filter: 'action'},
+    ]);
+  });
+
+  it('treats a provider that fails to load catalog/genres as contributing nothing', async () => {
+    mockGetCatalog.mockImplementation(async ({providerValue}) => {
+      if (providerValue === 'broken') {
+        throw new Error('down');
+      }
+      return [{title: 'Movies', filter: 'movies'}];
+    });
+    mockGetGenres.mockResolvedValue([]);
+
+    const {options} = await getCategoryCatalog(
+      [{value: 'broken'}, {value: 'working'}],
+      new AbortController().signal,
+    );
+
+    expect(options).toContainEqual({id: '__movies', label: 'Movies'});
+  });
+
+  it('does not let a hung provider block category discovery beyond its timeout', async () => {
+    jest.useFakeTimers();
+    try {
+      mockGetCatalog.mockImplementation(async ({providerValue}) => {
+        if (providerValue === 'hung') {
+          return new Promise(() => {});
+        }
+        return [{title: 'Movies', filter: 'movies'}];
+      });
+      mockGetGenres.mockResolvedValue([]);
+
+      const resultPromise = getCategoryCatalog(
+        [{value: 'hung'}, {value: 'fast'}],
+        new AbortController().signal,
+      );
+      await jest.advanceTimersByTimeAsync(8_000);
+      const {options} = await resultPromise;
+
+      expect(options).toContainEqual({id: '__movies', label: 'Movies'});
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});
+
+describe('getHomePageDataForCategory', () => {
+  beforeEach(() => {
+    mockGetPosts.mockReset();
+  });
+
+  it('merges posts for one category across every provider that has it', async () => {
+    mockGetPosts.mockImplementation(async ({providerValue}) => [
+      {title: `${providerValue} Movie`, link: `/${providerValue}/1`, image: ''},
+    ]);
+
+    const result = await getHomePageDataForCategory(
+      {id: '__movies', label: 'Movies'},
+      [
+        {providerValue: 'alpha', filter: 'movies'},
+        {providerValue: 'beta', filter: 'films'},
+      ],
+      new AbortController().signal,
+    );
+
+    expect(result.title).toBe('Movies');
+    expect(result.filter).toBe('__movies');
+    expect(result.Posts.map(p => p.title)).toEqual([
+      'alpha Movie',
+      'beta Movie',
+    ]);
+  });
+
+  it('drops a provider whose fetch fails and still returns the rest', async () => {
+    mockGetPosts.mockImplementation(async ({providerValue}) => {
+      if (providerValue === 'broken') {
+        throw new Error('down');
+      }
+      return [{title: 'Working Movie', link: '/w/1', image: ''}];
+    });
+
+    const result = await getHomePageDataForCategory(
+      {id: '__movies', label: 'Movies'},
+      [
+        {providerValue: 'broken', filter: 'movies'},
+        {providerValue: 'working', filter: 'movies'},
+      ],
+      new AbortController().signal,
+    );
+
+    expect(result.Posts.map(p => p.title)).toEqual(['Working Movie']);
+  });
+
+  it('does not let a hung provider block the rest beyond its timeout', async () => {
+    jest.useFakeTimers();
+    try {
+      mockGetPosts.mockImplementation(async ({providerValue}) => {
+        if (providerValue === 'hung') {
+          return new Promise(() => {});
+        }
+        return [{title: 'Fast Movie', link: '/f/1', image: ''}];
+      });
+
+      const resultPromise = getHomePageDataForCategory(
+        {id: '__movies', label: 'Movies'},
+        [
+          {providerValue: 'hung', filter: 'movies'},
+          {providerValue: 'fast', filter: 'movies'},
+        ],
+        new AbortController().signal,
+      );
+      await jest.advanceTimersByTimeAsync(8_000);
+      const result = await resultPromise;
+
+      expect(result.Posts.map(p => p.title)).toEqual(['Fast Movie']);
     } finally {
       jest.useRealTimers();
     }

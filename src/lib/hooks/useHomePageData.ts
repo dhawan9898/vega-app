@@ -3,7 +3,11 @@ import {useQuery, useQueryClient} from '@tanstack/react-query';
 import {
   getHomePageData,
   retryStaleProviders,
+  getCategoryCatalog,
+  getHomePageDataForCategory,
   HomePageData,
+  CategoryCatalog,
+  CategoryOption,
 } from '../getHomepagedata';
 import {ProviderExtension} from '../storage/extensionStorage';
 import {cacheStorage} from '../storage';
@@ -105,6 +109,84 @@ export const useHomePageData = ({
       cacheStorage.setString(cacheKey, JSON.stringify(query.data));
     }
   }, [cacheKey, installedProviders.length, query.data]);
+
+  return query;
+};
+
+interface UseCategoryCatalogOptions {
+  installedProviders: Pick<ProviderExtension, 'value'>[];
+  enabled?: boolean;
+}
+
+// Discovers the Netflix-style "Movies / TV Shows / <genre>" chips available
+// across installed providers. Cached longer than the feed itself - the set
+// of catalogs/genres a provider exposes rarely changes within a session.
+export const useCategoryCatalog = ({
+  installedProviders,
+  enabled = true,
+}: UseCategoryCatalogOptions) => {
+  const providerKey = installedProviders
+    .map(item => item.value)
+    .sort()
+    .join(',');
+
+  return useQuery<CategoryCatalog, Error>({
+    queryKey: ['homeCategoryCatalog', providerKey],
+    queryFn: ({signal}) => getCategoryCatalog(installedProviders, signal),
+    enabled: enabled && installedProviders.length > 0,
+    staleTime: 5 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
+    retry: 1,
+  });
+};
+
+interface UseCategoryHomeDataOptions {
+  category: CategoryOption | null;
+  providerFilters: {providerValue: string; filter: string}[];
+  enabled?: boolean;
+}
+
+// Fetches the merged section for a single selected category/genre chip.
+// Cache-first per category id so re-selecting a previously-viewed chip
+// shows something instantly while it revalidates.
+export const useCategoryHomeData = ({
+  category,
+  providerFilters,
+  enabled = true,
+}: UseCategoryHomeDataOptions) => {
+  const cacheKey = category ? `homeCategoryData:${category.id}` : '';
+
+  const query = useQuery<HomePageData, Error>({
+    queryKey: ['homeCategoryData', category?.id],
+    queryFn: ({signal}) =>
+      getHomePageDataForCategory(category as CategoryOption, providerFilters, signal),
+    enabled: enabled && !!category && providerFilters.length > 0,
+    staleTime: 60 * 1000,
+    gcTime: 30 * 60 * 1000,
+    retry: 1,
+    initialData: () => {
+      if (!cacheKey) {
+        return undefined;
+      }
+      const cache = cacheStorage.getString(cacheKey);
+      if (cache) {
+        try {
+          return JSON.parse(cache);
+        } catch {
+          return undefined;
+        }
+      }
+      return undefined;
+    },
+    initialDataUpdatedAt: 0,
+    refetchOnWindowFocus: false,
+  });
+
+  useEffect(() => {
+    if (query.data && cacheKey) {
+      cacheStorage.setString(cacheKey, JSON.stringify(query.data));
+    }
+  }, [cacheKey, query.data]);
 
   return query;
 };
