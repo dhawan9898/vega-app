@@ -117,7 +117,7 @@ module.exports = () => {
       autolinking: { exclude: ['expo-splash-screen'] },
       plugins,
       slug: 'vega',
-      version: '4.0.6',
+      version: '1.0.0',
       userInterfaceStyle: 'dark',
       experiments: {
         reactCompiler: true,
@@ -128,7 +128,11 @@ module.exports = () => {
           : {}),
         minSdkVersion: 28,
         package: PACKAGE_NAME,
-        versionCode: 192,
+        // Android requires this to strictly increase for the OS to accept
+        // an APK as an update over an existing install, regardless of the
+        // human-readable `version` (versionName) above - bumping it here on
+        // every release is required even though we reset versionName to 1.0.0.
+        versionCode: 193,
         permissions: [
           'FOREGROUND_SERVICE',
           'FOREGROUND_SERVICE_DATA_SYNC',

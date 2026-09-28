@@ -6,7 +6,12 @@ import useContentStore from '../zustand/contentStore';
 
 const DEFAULT_PROVIDER_SOURCE_AUTHOR = 'Zenda-Cross';
 const DEFAULT_PROVIDERS_SEEDED_KEY = 'defaultProvidersSeeded';
-const INSTALL_CONCURRENCY = 5;
+// Each provider install fans out into several concurrent file downloads
+// (posts/meta/stream/catalog/episodes/settings); keeping this modest limits
+// how many raw.githubusercontent.com requests are in flight at once during
+// the bulk first-run install, which otherwise risks timeouts/rate limiting
+// that can fail every provider in a batch at once.
+const INSTALL_CONCURRENCY = 3;
 
 /**
  * On a fresh install (no provider source configured, nothing installed yet),
@@ -45,12 +50,15 @@ export async function ensureDefaultProviders(): Promise<void> {
       source,
       false,
     );
-    // Reaching the source successfully counts as seeded; individual
-    // install failures below are logged and left for the user to retry
-    // from the Extensions screen rather than blocking future attempts.
-    mainStorage.setBool(DEFAULT_PROVIDERS_SEEDED_KEY, true);
 
     const toInstall = manifestProviders.filter(provider => !provider.disabled);
+    if (toInstall.length === 0) {
+      // The source itself has nothing enabled to install - nothing more we
+      // can do automatically, so don't keep retrying this every launch.
+      mainStorage.setBool(DEFAULT_PROVIDERS_SEEDED_KEY, true);
+      return;
+    }
+
     for (let i = 0; i < toInstall.length; i += INSTALL_CONCURRENCY) {
       const batch = toInstall.slice(i, i + INSTALL_CONCURRENCY);
       await Promise.all(
@@ -66,6 +74,16 @@ export async function ensureDefaultProviders(): Promise<void> {
     }
 
     const installedAfter = extensionStorage.getInstalledProviders();
+    // Only mark as seeded once at least one provider actually landed. This
+    // runs at most once per install, so if a transient failure (rate
+    // limiting, a network blip mid-install) left every install failing,
+    // marking it seeded anyway would permanently strand the user with an
+    // empty app and no automatic retry - only leaving it unseeded lets the
+    // next app launch try again.
+    if (installedAfter.length > 0) {
+      mainStorage.setBool(DEFAULT_PROVIDERS_SEEDED_KEY, true);
+    }
+
     useContentStore.getState().setInstalledProviders(installedAfter);
     if (
       !useContentStore.getState().provider?.value &&

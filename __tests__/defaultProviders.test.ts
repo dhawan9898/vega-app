@@ -167,6 +167,26 @@ describe('ensureDefaultProviders', () => {
     );
   });
 
+  it('does not mark seeded when every install fails, so it can retry next launch', async () => {
+    mockFetchManifest.mockResolvedValue([enabledProviderA, enabledProviderB]);
+    mockInstallProvider.mockRejectedValue(new Error('rate limited'));
+
+    await ensureDefaultProviders();
+
+    expect(mockSeeded).toBe(false);
+    expect(mockStoreState.setInstalledProviders).toHaveBeenCalledWith([]);
+    expect(mockStoreState.setProvider).not.toHaveBeenCalled();
+  });
+
+  it('marks seeded without installing anything when the source has no enabled providers', async () => {
+    mockFetchManifest.mockResolvedValue([disabledProvider]);
+
+    await ensureDefaultProviders();
+
+    expect(mockInstallProvider).not.toHaveBeenCalled();
+    expect(mockSeeded).toBe(true);
+  });
+
   it('does not override an already active provider', async () => {
     mockStoreState.provider = {value: 'existing'};
     mockFetchManifest.mockResolvedValue([enabledProviderA]);

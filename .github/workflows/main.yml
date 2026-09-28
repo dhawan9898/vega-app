@@ -130,10 +130,20 @@ jobs:
       GRADLE_JVM_HEAP_MB: '5120'
 
     steps:
+      # Defaults to whatever ref this run was actually dispatched against
+      # (github.ref_name - e.g. the branch picked in the Actions "Run
+      # workflow" dropdown, or main for the scheduled cron trigger), only
+      # overridden by the explicit branch input if one was given. Defaulting
+      # to a hardcoded 'main' here meant a manual dispatch triggered against
+      # any other branch silently built and released main's code instead -
+      # the release notes' commit hash (from github.sha, the dispatch ref)
+      # and its commit message/author (from `git log -1` on whatever this
+      # step actually checked out) could then belong to two different
+      # commits entirely.
       - name: Checkout specific branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.branch || 'main' }}
+          ref: ${{ github.event.inputs.branch || github.ref_name }}
           fetch-depth: 0
 
       # Get the latest commit info for Discord notification - WITH SANITIZATION
